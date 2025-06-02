@@ -185,3 +185,220 @@ INSERT INTO Reviews (MemberID, BookID, Rating, Comments) VALUES (1, 999, 4, 'Tes
 -- Updating a foreign key field (like MemberID in Loan) to a value that doesn’t exist.
 UPDATE Loans SET MemberID = 999 WHERE LoanID = 1;  -- MemberID 999 does not exist
 
+--------------------------
+-- Advanced SELECT Queries
+--------------------------
+
+-- List top 3 books by number of times they were loaned
+SELECT TOP 3 B.BookID, B.Title, COUNT(L.LoanID) AS TimesLoaned
+FROM Books AS B
+JOIN Loans AS L ON B.BookID = L.BookID
+GROUP BY B.BookID, B.Title
+ORDER BY COUNT(L.LoanID) DESC;
+
+-- Retrieve full loan history of a specific member including book title, loan & return dates
+DECLARE @MemberID INT = 3;
+SELECT L.LoanID, B.Title AS BookTitle, L.LoanDate, L.ReturnDate, L.LoanStatus
+FROM Loans AS L
+JOIN Books AS B ON L.BookID = B.BookID
+WHERE L.MemberID = @MemberID
+ORDER BY L.LoanDate DESC;
+
+-- Show all reviews for a book with member name and comments
+DECLARE @BookID INT = 2;
+SELECT R.ReviewID, M.FullName AS MemberName, R.Rating, R.Comments, R.ReviewDate
+FROM Reviews AS R
+JOIN Members AS M ON R.MemberID = M.MemberID
+WHERE R.BookID = @BookID
+ORDER BY R.ReviewDate DESC;
+
+-- List all staff working in a given library
+DECLARE @LibraryID INT = 1;
+SELECT StaffID, FullName, Position, ContactNumber
+FROM Staff
+WHERE LibraryID = @LibraryID;
+
+-- Show books whose prices fall within a given range
+DECLARE @MinPrice DECIMAL(8,2) = 5.00, @MaxPrice DECIMAL(8,2) = 15.00;
+SELECT BookID, Title, Price
+FROM Books
+WHERE Price BETWEEN @MinPrice AND @MaxPrice;
+
+-- List all currently active loans (not yet returned) with member and book info
+SELECT L.LoanID, M.FullName, B.Title, L.LoanDate, L.DueDate
+FROM Loans AS L
+JOIN Members AS M ON L.MemberID = M.MemberID
+JOIN Books AS B ON L.BookID = B.BookID
+WHERE L.LoanStatus = 'Issued';
+
+-- List members who have paid any fine
+SELECT DISTINCT M.MemberID, M.FullName
+FROM Payments AS P
+JOIN Loans AS L ON P.LoanID = L.LoanID
+JOIN Members AS M ON L.MemberID = M.MemberID;
+
+-- List books that have never been reviewed
+SELECT B.BookID, B.Title
+FROM Books AS B
+LEFT JOIN Reviews AS R ON B.BookID = R.BookID
+WHERE R.ReviewID IS NULL;
+
+-- Show a member’s loan history with book titles and loan status
+DECLARE @MemberLoanID INT = 2;
+SELECT L.LoanID, B.Title AS BookTitle, L.LoanStatus
+FROM Loans AS L
+JOIN Books AS B ON L.BookID = B.BookID
+WHERE L.MemberID = @MemberLoanID;
+
+-- List all members who have never borrowed any book
+SELECT M.MemberID, M.FullName
+FROM Members AS M
+LEFT JOIN Loans AS L ON M.MemberID = L.MemberID
+WHERE L.LoanID IS NULL;
+
+-- List books that were never loaned
+SELECT B.BookID, B.Title
+FROM Books AS B
+LEFT JOIN Loans AS L ON B.BookID = L.BookID
+WHERE L.LoanID IS NULL;
+
+-- List all payments with member name and book title
+SELECT P.PaymentID, M.FullName, B.Title, P.Amount, P.Method, P.PaymentDate
+FROM Payments AS P
+JOIN Loans AS L ON P.LoanID = L.LoanID
+JOIN Members AS M ON L.MemberID = M.MemberID
+JOIN Books AS B ON L.BookID = B.BookID;
+
+-- List all overdue loans with member and book details
+SELECT L.LoanID, M.FullName, B.Title, L.DueDate
+FROM Loans AS L
+JOIN Members AS M ON L.MemberID = M.MemberID
+JOIN Books AS B ON L.BookID = B.BookID
+WHERE L.LoanStatus = 'Overdue';
+
+-- Show how many times a book has been loaned
+DECLARE @LoanBookID INT = 1;
+SELECT B.BookID, B.Title, COUNT(L.LoanID) AS LoanCount
+FROM Books AS B
+LEFT JOIN Loans AS L ON B.BookID = L.BookID
+WHERE B.BookID = @LoanBookID
+GROUP BY B.BookID, B.Title;
+
+-- Get total fines paid by a member across all loans
+DECLARE @FineMemberID INT = 2;
+SELECT M.MemberID, M.FullName, SUM(P.Amount) AS TotalFines
+FROM Payments AS P
+JOIN Loans AS L ON P.LoanID = L.LoanID
+JOIN Members AS M ON L.MemberID = M.MemberID
+WHERE M.MemberID = @FineMemberID
+GROUP BY M.MemberID, M.FullName;
+
+-- Show count of available and unavailable books in a library
+DECLARE @StatsLibraryID INT = 1;
+SELECT 
+    LibraryID,
+    SUM(CASE WHEN IsAvailable = 1 THEN 1 ELSE 0 END) AS AvailableBooks,
+    SUM(CASE WHEN IsAvailable = 0 THEN 1 ELSE 0 END) AS UnavailableBooks
+FROM Books
+WHERE LibraryID = @StatsLibraryID
+GROUP BY LibraryID;
+
+-- Return books with more than 5 reviews and average rating > 4.5
+SELECT B.BookID, B.Title, COUNT(R.ReviewID) AS ReviewCount, AVG(R.Rating) AS AvgRating
+FROM Books AS B
+JOIN Reviews AS R ON B.BookID = R.BookID
+GROUP BY B.BookID, B.Title
+HAVING COUNT(R.ReviewID) > 5 AND AVG(R.Rating) > 4.5;
+
+------------------------
+-- Simple Views Practice
+------------------------
+
+-- 1. ViewAvailableBooks: A list of all books marked as available
+CREATE VIEW ViewAvailableBooks AS
+SELECT BookID, ISBN, Title, Genre, Price, ShelfLocation, LibraryID
+FROM Books
+WHERE IsAvailable = 1;
+-- Testing the view
+SELECT * FROM ViewAvailableBooks;
+
+-- 2. ViewActiveMembers: Members whose membership started in the past 12 months
+CREATE VIEW ViewActiveMembers AS
+SELECT MemberID, FullName, Email, PhoneNumber, MembershipDate
+FROM Members
+WHERE MembershipDate >= DATEADD(YEAR, -1, GETDATE());
+-- Testing the view
+SELECT * FROM ViewActiveMembers;
+
+-- 3. ViewLibraryContacts: List of libraries and their contact numbers
+CREATE VIEW ViewLibraryContacts AS
+SELECT LibraryID, Name AS LibraryName, ContactNumber
+FROM Libraries;
+-- Testing the view
+SELECT * FROM ViewLibraryContacts;
+
+--------------------------
+-- Transactions Simulation
+--------------------------
+BEGIN TRANSACTION;
+
+BEGIN TRY
+    DECLARE 
+        @MemberID INT = 3,
+        @BookID   INT = 3,
+        @DueDate  DATE = DATEADD(DAY, 14, GETDATE());  -- e.g., 2 weeks from today
+
+    -- 1. Insert a new loan record
+    INSERT INTO Loans (MemberID, BookID, DueDate)
+    VALUES (@MemberID, @BookID, @DueDate);
+
+    -- 2. Update the book’s availability to FALSE (0)
+    UPDATE Books
+    SET IsAvailable = 0
+    WHERE BookID = @BookID;
+
+    -- 3. If both succeed, commit
+    COMMIT TRANSACTION;
+END TRY
+BEGIN CATCH
+    -- If any error occurs, roll back
+    ROLLBACK TRANSACTION;
+
+    DECLARE @ErrorMessage NVARCHAR(4000) = ERROR_MESSAGE();
+    PRINT 'Transaction failed: ' + @ErrorMessage;
+END CATCH;
+
+---------------------------------
+-- Aggregation Functions Practice
+---------------------------------
+-- 1. Count total books in each genre
+SELECT Genre, COUNT(BookID) AS TotalBooks
+FROM Books
+GROUP BY Genre
+ORDER BY TotalBooks DESC;
+
+-- 2. Average rating per book
+SELECT B.BookID, B.Title, AVG(CAST(R.Rating AS DECIMAL(3,2))) AS AvgRating, COUNT(R.ReviewID) AS ReviewCount
+FROM Books AS B
+LEFT JOIN Reviews AS R ON B.BookID = R.BookID
+GROUP BY B.BookID, B.Title
+ORDER BY AvgRating DESC;
+
+-- 3. Total fine paid by each member
+SELECT M.MemberID, M.FullName, COALESCE(SUM(P.Amount), 0) AS TotalFinePaid
+FROM Members AS M
+LEFT JOIN Loans AS L ON M.MemberID = L.MemberID
+LEFT JOIN Payments AS P ON L.LoanID = P.LoanID
+GROUP BY M.MemberID, M.FullName
+ORDER BY TotalFinePaid DESC;
+
+-- 4. Highest payment ever made (single payment)
+SELECT MAX(Amount) AS HighestPayment
+FROM Payments;
+
+-- 5. Number of loans per member
+SELECT M.MemberID, M.FullName, COUNT(L.LoanID) AS LoanCount
+FROM Members AS M
+LEFT JOIN Loans AS L ON M.MemberID = L.MemberID
+GROUP BY M.MemberID, M.FullName
+ORDER BY LoanCount DESC;
